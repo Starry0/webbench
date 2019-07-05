@@ -99,6 +99,7 @@ int main(int argc, char *argv[]) {
             case '1': http10 = 1;break;
             case '2': http10 = 2;break;
             case 'V': printf(PROGRAM_VERSION"\n");exit(0);
+            case 't': benchtime = atoi(optarg);break;
             case 'p': {
                 tmp = strrchr(optarg,':');
                 proxyhost = optarg;
@@ -190,7 +191,7 @@ void build_request(const char* url) {
         exit(2);
     }
     if(proxyhost == NULL) {
-        if(strncasecmp("http://",url,7) != NULL) {
+        if(strncasecmp("http://",url,7) != 0) {
             fprintf(stderr,"\nOnly HTTP protocol is directly supported, set --proxy for others.\n");
             exit(2);
         }
@@ -211,9 +212,9 @@ void build_request(const char* url) {
             strncpy(tmp, strchr(url+i,':')+1,strchr(url+i,'/')-strchr(url+i,':')-1);
             // printf("%s %s\n",host, tmp);
             proxyport = atoi(tmp);
-            if(proxyport == NULL) proxyport = 80;
+            if(proxyport == 0) proxyport = 80;
         } else {
-            strncpy(host, url+i, strcspn(url+i, '/'));
+            strncpy(host, url+i, strcspn(url+i, "/"));
         }
         // printf("Host=%s\n",host);
         strcat(request+strlen(request), url+i+strcspn(url+i, "/"));
@@ -238,14 +239,13 @@ void build_request(const char* url) {
         strcat(request, "Connection: close\r\n");
     }
     if(http10 > 0) strcat(request, "\r\n");
-    printf("request=%s\n",request);
+    // printf("request=%s\n",request);
 }
 
 static int bench() {
     int i, j, k;
     pid_t pid = 0;
     FILE *file;
-    printf("dsadsa\n");
     i = Socket(proxyhost==NULL?host:proxyhost, proxyport);
     if(i < 0) {
         fprintf(stderr,"\nConnect to server failed. Aborting benchmark.\n");
@@ -279,7 +279,7 @@ static int bench() {
             perror("open pipe for writing failed.");
             return 3;
         }
-        fprintf(file, "%d %d %d\n",speed+1, failed+1, bytes+1);
+        fprintf(file, "%d %d %d\n",speed, failed, bytes);
         fclose(file);
         // printf("%d client",pid);
         return 0;
@@ -315,5 +315,53 @@ static int bench() {
 void benchcore(const char *host, const int port, const char *req) {
     int rlen;
     char buf[1500];
+    int s, i;
+    struct sigaction sa;
+    sa.sa_handler = alarm_handler;
+    sa.sa_flags = 0;
+    if(sigaction(SIGALRM, &sa, NULL))
+        exit(3);
+    alarm(benchtime);
 
+    rlen = strlen(req);
+    nexttry:while(1) {
+        if(timerexpired) {
+            if(failed > 0) {
+                failed--;
+            }
+            return;
+        }
+        s = Socket(host, port);
+        if(s < 0) {
+            failed++; 
+            continue;
+        }
+        if(rlen != write(s, req, rlen)) {
+            failed++;
+            close(s);
+            continue;
+        }
+        if(http10 == 0)
+            if(shutdown(s, 1)) {
+                failed++;close(s);
+                continue;
+            }
+        if(force == 0) {
+            while(1) {
+                if(timerexpired) break;
+                i = read(s, buf, 1500);
+                if(i < 0) {
+                    failed ++;
+                    close(s);
+                    goto nexttry;
+                } else if(i == 0) break;
+                else bytes += i;
+            }
+        }
+        if(close(s)) {
+            failed ++;
+            continue;
+        }
+        speed++;
+    }
 }
