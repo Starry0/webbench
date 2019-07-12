@@ -259,11 +259,13 @@ static int bench() {
 
     for(i = 0; i < clients; i ++) {
         pid = fork();
-        if(pid <= (pid_t)0) {
+        printf("%d\n",i);
+        if(pid <= (pid_t)0) {  //使得创建的进程是clients个
             sleep(1);
             break;
         }
     }
+    printf("YES\n");
     if(pid < (pid_t)0) {
         fprintf(stderr,"problems forking worker no. %d\n",i);
         perror("fork failed.");
