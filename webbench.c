@@ -223,7 +223,7 @@ void build_request(const char* url) {
         strcat(request, url);
     }
     if(http10 == 1) strcat(request, " HTTP/1.0");
-    else if(http10 == 2) strcat(request, "HTTP/1.1");
+    else if(http10 == 2) strcat(request, " HTTP/1.1");
     strcat(request, "\r\n");
     if(http10 > 0)
         strcat(request, "User-Agent: WebBench "PROGRAM_VERSION"\r\n");
@@ -324,6 +324,7 @@ void benchcore(const char *host, const int port, const char *req) {
     alarm(benchtime);
 
     rlen = strlen(req);
+    printf("%s\n",req);
     nexttry:while(1) {
         if(timerexpired) {
             if(failed > 0) {
@@ -333,16 +334,19 @@ void benchcore(const char *host, const int port, const char *req) {
         }
         s = Socket(host, port);
         if(s < 0) {
+            printf("failed one\n");
             failed++; 
             continue;
         }
         if(rlen != write(s, req, rlen)) {
+            printf("failed two\n");
             failed++;
             close(s);
             continue;
         }
         if(http10 == 0)
             if(shutdown(s, 1)) {
+                printf("failed five\n");
                 failed++;close(s);
                 continue;
             }
@@ -351,6 +355,7 @@ void benchcore(const char *host, const int port, const char *req) {
                 if(timerexpired) break;
                 i = read(s, buf, 1500);
                 if(i < 0) {
+                    printf("failed three\n");
                     failed ++;
                     close(s);
                     goto nexttry;
@@ -359,6 +364,7 @@ void benchcore(const char *host, const int port, const char *req) {
             }
         }
         if(close(s)) {
+            printf("failed four\n");
             failed ++;
             continue;
         }
